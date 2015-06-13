@@ -1,3 +1,5 @@
+require "timer"
+
 function love.load(args)
   if arg[#arg] == "-debug" then require("mobdebug").start() end
   
@@ -14,8 +16,7 @@ function love.load(args)
   player.drag = 9.0e-1
   player.size = 32
   player.color = {255, 255, 255, 255}
-  player.echoTimer = 0
-  player.echoCooldown = 1
+  player.echoTimer = createTimer(1, true)
   
   camera = {}
   camera.x = 0
@@ -82,11 +83,7 @@ function love.update(dt)
     player.dx = player.dx + player.acceleration * dt
   end
 
-  player.dx = player.dx - player.dx * player.drag * dt
-  player.x = player.x + player.dx * dt
-  
-  player.dy = player.dy - player.dy * player.drag * dt
-  player.y = player.y + player.dy * dt
+  updateEntityPosition(player, dt)
   
   if player.x < player.size / 2 then
     player.x = player.size / 2
@@ -108,12 +105,12 @@ function love.update(dt)
     player.dy = 0
   end
   
-  if love.keyboard.isDown(" ") and player.echoTimer == 0 then
+  if love.keyboard.isDown(" ") and player.echoTimer.time == 0 then
     emitEcho(player)    
-    player.echoTimer = player.echoCooldown
+    resetTimer(player.echoTimer)
   end
   
-  player.echoTimer = math.max(player.echoTimer - dt, 0)
+  updateTimer(player.echoTimer, dt)
   
   -- Update echoes
   for echo, _ in pairs(echoes) do
@@ -138,11 +135,7 @@ function love.update(dt)
   
   -- Update entities
   for entity, _ in pairs(entities) do    
-    entity.dx = entity.dx - entity.dx * entity.drag * dt
-    entity.x = entity.x + entity.dx * dt
-    
-    entity.dy = entity.dy - entity.dy * entity.drag * dt
-    entity.y = entity.y + entity.dy * dt
+    updateEntityPosition(entity, dt)
     
     if entitiesCollide(player, entity) then
       if entity.type == "prey" then
@@ -155,7 +148,7 @@ function love.update(dt)
       end
     end
     
-    updateEntityType(entity)
+    updateEntityType(entity, dt)
   end
   
   -- Update camera
@@ -261,6 +254,14 @@ function updateEntityType(entity)
     entity.type = "predator"
     entity.color = ENTITY_PREDATOR_COLOR
   end
+end
+
+function updateEntityPosition(entity, dt)
+  entity.dx = entity.dx - entity.dx * entity.drag * dt
+  entity.x = entity.x + entity.dx * dt
+  
+  entity.dy = entity.dy - entity.dy * entity.drag * dt
+  entity.y = entity.y + entity.dy * dt
 end
 
 function eatEntity(biggerEntity, smallerEntity)
