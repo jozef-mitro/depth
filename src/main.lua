@@ -1,9 +1,13 @@
 function love.load(args)
   if arg[#arg] == "-debug" then require("mobdebug").start() end
   
+  world = {}
+  world.width = 8000
+  world.height = 6000
+  
   player = {}
-  player.x = love.window.getWidth() / 2
-  player.y = love.window.getHeight() / 2
+  player.x = 100
+  player.y = 100
   player.dx = 0
   player.dy = 0
   player.acceleration = 1.0e2
@@ -13,13 +17,17 @@ function love.load(args)
   player.echoTimer = 0
   player.echoCooldown = 1
   
+  camera = {}
+  camera.x = 0
+  camera.y = 0
+  
   ECHO_GROWTH = 320
-  ECHO_MAX_SIZE = 1280 
+  ECHO_MAX_SIZE = 3200 
   echoes = {}
   
   prey = {} 
-  prey.x = 100
-  prey.y = 100
+  prey.x = 600
+  prey.y = 800
   prey.dx = 0
   prey.dy = 0
   prey.acceleration = 1.0e2
@@ -28,8 +36,8 @@ function love.load(args)
   prey.color = {0, 255, 0, 255}
   
   predator = {} 
-  predator.x = 600
-  predator.y = 300
+  predator.x = 900
+  predator.y = 1200
   predator.dx = 0
   predator.dy = 0
   predator.acceleration = 1.0e2
@@ -39,6 +47,7 @@ function love.load(args)
 end
 
 function love.update(dt)
+  -- Update player
   if love.keyboard.isDown("w") then
     player.dy = player.dy - player.acceleration * dt
   end
@@ -68,6 +77,7 @@ function love.update(dt)
   
   player.echoTimer = math.max(player.echoTimer - dt, 0)
   
+  -- Update echoes
   for echo, _ in pairs(echoes) do
     echo.size = echo.size + ECHO_GROWTH * dt
     -- Update alpha
@@ -91,28 +101,44 @@ function love.update(dt)
       echoes[echo] = nil
     end
   end
+  
+  -- Update camera
+  local windowWidth = love.window.getWidth()
+  camera.x = math.max(player.x - windowWidth / 2, 0)
+  camera.x = math.min(camera.x, world.width)
+  
+  local windowHeight = love.window.getHeight()
+  camera.y = math.max(player.y - windowHeight / 2, 0)
+  camera.y = math.min(camera.y, world.height)
 end
 
 function love.draw() 
-  love.graphics.setBackgroundColor(0, 0, 32)
+  love.graphics.setBackgroundColor(32 * (1 - (camera.y / world.height)),
+    64 * (1 - (camera.y / world.height)),
+    128 * (1 - (camera.y / world.height)))
   
-  -- Draw prey
-  love.graphics.setColor(prey.color)
-  love.graphics.circle("fill", prey.x, prey.y, prey.size / 2)
+  love.graphics.push()
+  love.graphics.translate(-camera.x, -camera.y)
   
-  -- Draw player
-  love.graphics.setColor(player.color)
-  love.graphics.circle("fill", player.x, player.y, player.size / 2)
-  
-  -- Draw predator
-  love.graphics.setColor(predator.color)
-  love.graphics.circle("fill", predator.x, predator.y, predator.size / 2)
-  
-  -- Draw echoes
-  for echo, _ in pairs(echoes) do
-    love.graphics.setColor(echo.color)
-    love.graphics.circle("line", echo.x, echo.y, echo.size / 2)
-  end
+    -- Draw prey
+    love.graphics.setColor(prey.color)
+    love.graphics.circle("fill", prey.x, prey.y, prey.size / 2)
+    
+    -- Draw player
+    love.graphics.setColor(player.color)
+    love.graphics.circle("fill", player.x, player.y, player.size / 2)
+    
+    -- Draw predator
+    love.graphics.setColor(predator.color)
+    love.graphics.circle("fill", predator.x, predator.y,
+      predator.size / 2)
+    
+    -- Draw echoes
+    for echo, _ in pairs(echoes) do
+      love.graphics.setColor(echo.color)
+      love.graphics.circle("line", echo.x, echo.y, echo.size / 2)
+    end
+  love.graphics.pop()
 end
 
 function circlesOverlap(circle1, circle2)
