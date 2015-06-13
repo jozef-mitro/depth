@@ -21,8 +21,8 @@ function love.load(args)
   camera.x = 0
   camera.y = 0
   
-  ECHO_GROWTH = 640
-  ECHO_MAX_SIZE = 1600 
+  ECHO_GROWTH = 800
+  ECHO_MAX_SIZE = 2400 
   echoes = {}
   
   ENTITY_MIN_SIZE = 4
@@ -31,7 +31,7 @@ function love.load(args)
   ENTITY_PREDATOR_COLOR = {255, 0, 0, 255}
   
   entities = {}
-  for i = 1, 320 do
+  for i = 1, 32 do
     local newEntity = {}
     newEntity.x = math.random(world.width)
     newEntity.y = math.random(world.height)
@@ -46,6 +46,22 @@ function love.load(args)
     
     entities[newEntity] = true;
   end
+  
+  fovShader = love.graphics.newShader[[
+    extern number playerX;
+    extern number playerY;
+    extern number playerRadius;
+    extern number depth;
+    vec4 effect(vec4 color, Image texture,
+    vec2 texture_coords, vec2 screen_coords) {
+      vec4 pixel = Texel(texture, texture_coords);
+      
+      number distance = distance(screen_coords, vec2(playerX, playerY));
+      number sh = (1 - depth); // shallowness
+      number alpha = (distance - playerRadius) / (640 * sh);
+      return pixel * vec4(0.0,0.0,0.0,alpha);
+    }
+  ]]
 end
 
 function love.update(dt)
@@ -169,7 +185,21 @@ function love.draw()
     -- Draw player
     love.graphics.setColor(player.color)
     love.graphics.circle("fill", player.x, player.y, player.size / 2)
-    
+  love.graphics.pop()
+  
+  local windowHeight = love.window.getHeight()
+  fovShader:send("playerX", player.x - camera.x)
+  fovShader:send("playerY", windowHeight - (player.y - camera.y))
+  fovShader:send("playerRadius", player.size / 2)
+  fovShader:send("depth", player.y / world.height)
+  love.graphics.setShader(fovShader)
+  love.graphics.rectangle("fill", 0, 0,
+    love.window.getWidth(), love.window.getHeight())
+  love.graphics.setShader()
+  
+  love.graphics.push()
+  love.graphics.translate(-camera.x, -camera.y)
+  
     -- Draw echoes
     for echo, _ in pairs(echoes) do
       love.graphics.setColor(echo.color)
