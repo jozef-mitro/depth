@@ -22,35 +22,29 @@ function love.load(args)
   camera.y = 0
   
   ECHO_GROWTH = 640
-  ECHO_MAX_SIZE = 3200 
+  ECHO_MAX_SIZE = 1600 
   echoes = {}
   
-  prey = {}
-  for i = 1, 32 do
-    local newPrey = {}
-    newPrey.x = math.random(world.width)
-    newPrey.y = math.random(world.height)
-    newPrey.dx = 0
-    newPrey.dy = 0
-    newPrey.acceleration = 1.0e2
-    newPrey.drag = 2.5e-1
-    newPrey.size = 8
-    newPrey.color = {0, 255, 0, 255}
-    prey[newPrey] = true;
-  end
+  ENTITY_MIN_SIZE = 4
+  ENTITY_MAX_SIZE = 128
+  ENTITY_PREY_COLOR = {0, 255, 0, 255}
+  ENTITY_PREDATOR_COLOR = {255, 0, 0, 255}
   
-  predators = {} 
-  for i = 1, 32 do
-    local newPredator = {}
-    newPredator.x = math.random(world.width)
-    newPredator.y = math.random(world.height)
-    newPredator.dx = 0
-    newPredator.dy = 0
-    newPredator.acceleration = 1.0e2
-    newPredator.drag = 2.5e-1
-    newPredator.size = 64
-    newPredator.color = {255, 0, 0, 255}
-    predators[newPredator] = true
+  entities = {}
+  for i = 1, 320 do
+    local newEntity = {}
+    newEntity.x = math.random(world.width)
+    newEntity.y = math.random(world.height)
+    newEntity.dx = 0
+    newEntity.dy = 0
+    newEntity.acceleration = 3.0e2
+    newEntity.drag = 9.0e-1
+    newEntity.size = ENTITY_MIN_SIZE +
+      (newEntity.y / world.height) * (ENTITY_MAX_SIZE - ENTITY_MIN_SIZE)
+    newEntity.size = newEntity.size * ((math.random() * 0.5) + 0.75)
+    updateEntityType(newEntity)
+    
+    entities[newEntity] = true;
   end
 end
 
@@ -78,6 +72,26 @@ function love.update(dt)
   player.dy = player.dy - player.dy * player.drag * dt
   player.y = player.y + player.dy * dt
   
+  if player.x < player.size / 2 then
+    player.x = player.size / 2
+    player.dx = 0
+  end
+  
+  if player.x > world.width - player.size / 2 then
+    player.x = world.width - player.size / 2
+    player.dx = 0
+  end
+  
+  if player.y < player.size / 2 then
+    player.y = player.size / 2
+    player.dy = 0
+  end
+  
+  if player.y > world.height - player.size / 2 then
+    player.y = world.height - player.size / 2
+    player.dy = 0
+  end
+  
   if love.keyboard.isDown(" ") and player.echoTimer == 0 then
     emitEcho(player)    
     player.echoTimer = player.echoCooldown
@@ -92,19 +106,11 @@ function love.update(dt)
     echo.color[4] = math.max(255 - (echo.size / ECHO_MAX_SIZE) * 255, 0)
     
     if echo.owner == player then
-      for preyInstance, _ in pairs(prey) do
-        if circlesCollide(echo, preyInstance) and
-          not echo.echoedFrom[preyInstance] then
-          emitEcho(preyInstance)
-          echo.echoedFrom[preyInstance] = true
-        end
-      end
-      
-      for predator, _ in pairs(predators) do
-        if circlesCollide(echo, predator) and
-          not echo.echoedFrom[predator]  then
-          emitEcho(predator)
-          echo.echoedFrom[predator] = true
+      for entity, _ in pairs(entities) do
+        if entitiesCollide(echo, entity) and
+          not echo.echoedFrom[entity] then
+          emitEcho(entity)
+          echo.echoedFrom[entity] = true
         end
       end
     end
@@ -114,21 +120,36 @@ function love.update(dt)
     end
   end
   
-  -- Update prey
-  for preyInstance, _ in pairs(prey) do
-    if circlesOverlap(player, preyInstance) then
-      prey[preyInstance] = nil
+  -- Update entities
+  for entity, _ in pairs(entities) do    
+    entity.dx = entity.dx - entity.dx * entity.drag * dt
+    entity.x = entity.x + entity.dx * dt
+    
+    entity.dy = entity.dy - entity.dy * entity.drag * dt
+    entity.y = entity.y + entity.dy * dt
+    
+    if entitiesCollide(player, entity) then
+      if entity.type == "prey" then
+        eatEntity(player, entity)
+        if entity.size < 0 then
+          entities[entity] = nil
+        end
+      elseif entity.type == "predator" then
+        eatEntity(entity, player)
+      end
     end
+    
+    updateEntityType(entity)
   end
   
   -- Update camera
   local windowWidth = love.window.getWidth()
   camera.x = math.max(player.x - windowWidth / 2, 0)
-  camera.x = math.min(camera.x, world.width)
+  camera.x = math.min(camera.x, world.width - windowWidth)
   
   local windowHeight = love.window.getHeight()
   camera.y = math.max(player.y - windowHeight / 2, 0)
-  camera.y = math.min(camera.y, world.height)
+  camera.y = math.min(camera.y, world.height - windowHeight)
 end
 
 function love.draw() 
@@ -139,23 +160,15 @@ function love.draw()
   love.graphics.push()
   love.graphics.translate(-camera.x, -camera.y)
   
-    -- Draw prey
-    for preyInstance, _ in pairs(prey) do
-      love.graphics.setColor(preyInstance.color)
-      love.graphics.circle("fill", preyInstance.x, preyInstance.y,
-        preyInstance.size / 2)
+    -- Draw entities
+    for entity, _ in pairs(entities) do
+      love.graphics.setColor(entity.color)
+      love.graphics.circle("fill", entity.x, entity.y, entity.size / 2)
     end
     
     -- Draw player
     love.graphics.setColor(player.color)
     love.graphics.circle("fill", player.x, player.y, player.size / 2)
-    
-    -- Draw predator
-    for predator, _ in pairs(predators) do
-      love.graphics.setColor(predator.color)
-      love.graphics.circle("fill", predator.x, predator.y,
-        predator.size / 2)
-    end
     
     -- Draw echoes
     for echo, _ in pairs(echoes) do
@@ -168,26 +181,26 @@ function love.draw()
   love.graphics.print(love.timer.getFPS(), 32, 32)
 end
 
-function circlesOverlap(circle1, circle2)
-  local x1 = circle1.x
-  local x2 = circle2.x
-  local y1 = circle1.y
-  local y2 = circle2.y
-  local r1 = circle1.size / 2
-  local r2 = circle2.size / 2
+function entitiesOverlap(entity1, entity2)
+  local x1 = entity1.x
+  local x2 = entity2.x
+  local y1 = entity1.y
+  local y2 = entity2.y
+  local r1 = entity1.size / 2
+  local r2 = entity2.size / 2
   
   local distanceSquared = math.pow(x2 - x1, 2) + math.pow(y2 - y1, 2)
   
   return distanceSquared < math.pow(r2 - r1, 2)
 end
 
-function circlesCollide(circle1, circle2)
-  local x1 = circle1.x
-  local x2 = circle2.x
-  local y1 = circle1.y
-  local y2 = circle2.y
-  local r1 = circle1.size / 2
-  local r2 = circle2.size / 2
+function entitiesCollide(entity1, entity2)
+  local x1 = entity1.x
+  local x2 = entity2.x
+  local y1 = entity1.y
+  local y2 = entity2.y
+  local r1 = entity1.size / 2
+  local r2 = entity2.size / 2
   
   local distanceSquared = math.pow(x2 - x1, 2) + math.pow(y2 - y1, 2)
   
@@ -208,4 +221,44 @@ function emitEcho(entity)
   end
     
   echoes[newEcho] = true 
+end
+
+function updateEntityType(entity)
+  if entity.size < player.size then
+    entity.type = "prey"
+    entity.color = ENTITY_PREY_COLOR
+  else
+    entity.type = "predator"
+    entity.color = ENTITY_PREDATOR_COLOR
+  end
+end
+
+function eatEntity(biggerEntity, smallerEntity)
+  local x1 = biggerEntity.x
+  local x2 = smallerEntity.x
+  local y1 = biggerEntity.y
+  local y2 = smallerEntity.y
+  local r1 = biggerEntity.size / 2
+  local r2 = smallerEntity.size / 2
+  local v1 = calulacteCircleVolume(r1)
+  local v2 = calulacteCircleVolume(r2)
+  
+  local distance = math.sqrt(math.pow(x2 - x1, 2) + math.pow(y2 - y1, 2))
+  
+  local newR2 = distance - r1
+  local newV2 = calulacteCircleVolume(newR2)
+  -- only grow by fraction of eaten mass
+  local newV1 = v1 + 0.25 * (v2 - newV2)
+  local newR1 = calulacteCircleRadius(newV1)
+  
+  biggerEntity.size = newR1 * 2
+  smallerEntity.size = newR2 * 2
+end
+
+function calulacteCircleVolume(radius)
+  return math.pi * math.pow(radius, 2)
+end
+
+function calulacteCircleRadius(volume)
+  return math.sqrt(volume / math.pi)
 end
